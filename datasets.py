@@ -57,7 +57,7 @@ class CarsDataset(Dataset):
                 self.images.append(path)
                 self.labels.append(label)
 
-        print('Car Dataset with {} instances for {} phase'.format(len(self.images), self.phase))
+        print(f'Car Dataset with {len(self.images)} instances for {self.phase} phase')
 
         # transform
         self.transform = transform
@@ -97,8 +97,7 @@ class INatDataset(ImageFolder):
         targeter = {}
         indexer = 0
         for elem in data_for_targeter['annotations']:
-            king = []
-            king.append(data_catg[int(elem['category_id'])][category])
+            king = [data_catg[int(elem['category_id'])][category]]
             if king[0] not in targeter.keys():
                 targeter[king[0]] = indexer
                 indexer += 1
@@ -150,17 +149,16 @@ def build_dataset(is_train, args, infer_no_resize=False):
 
 
 def build_transform(is_train, args, infer_no_resize=False):
-    if hasattr(args, 'arch'):
-        if 'cait' in args.arch and not is_train:
-            print('# using cait eval transform')
-            transformations = {}
-            transformations= transforms.Compose(
-                [transforms.Resize(args.input_size, interpolation=3),
-                transforms.CenterCrop(args.input_size),
-                transforms.ToTensor(),
-                transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)])
-            return transformations
-    
+    if hasattr(args, 'arch') and 'cait' in args.arch and not is_train:
+        print('# using cait eval transform')
+        transformations = {}
+        transformations= transforms.Compose(
+            [transforms.Resize(args.input_size, interpolation=3),
+            transforms.CenterCrop(args.input_size),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD)])
+        return transformations
+
     if infer_no_resize:
         print('# using cait eval transform')
         transformations = {}
@@ -194,11 +192,18 @@ def build_transform(is_train, args, infer_no_resize=False):
     t = []
     if resize_im:
         size = int((256 / 224) * args.input_size)
-        t.append(
-            transforms.Resize(size, interpolation=3),  # to maintain same ratio w.r.t. 224 images
+        t.extend(
+            (
+                transforms.Resize(size, interpolation=3),
+                transforms.CenterCrop(args.input_size),
+            )
         )
-        t.append(transforms.CenterCrop(args.input_size))
 
-    t.append(transforms.ToTensor())
-    t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
+    t.extend(
+        (
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
+        )
+    )
+
     return transforms.Compose(t)

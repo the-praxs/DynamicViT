@@ -19,7 +19,7 @@ class DistillationLoss(torch.nn.Module):
         super().__init__()
         self.base_criterion = base_criterion
         self.teacher_model = teacher_model
-        assert distillation_type in ['none', 'soft', 'hard']
+        assert distillation_type in {'none', 'soft', 'hard'}
         self.distillation_type = distillation_type
         self.alpha = alpha
         self.tau = tau
@@ -62,8 +62,7 @@ class DistillationLoss(torch.nn.Module):
         elif self.distillation_type == 'hard':
             distillation_loss = F.cross_entropy(outputs_kd, teacher_outputs.argmax(dim=1))
 
-        loss = base_loss * (1 - self.alpha) + distillation_loss * self.alpha
-        return loss
+        return base_loss * (1 - self.alpha) + distillation_loss * self.alpha
 
 
 class DiffPruningLoss(torch.nn.Module):
@@ -175,10 +174,7 @@ class DistillDiffPruningLoss(torch.nn.Module):
 
         ratio = self.keep_ratio
         for i, score in enumerate(out_pred_score):
-            if self.dynamic:
-                pos_ratio = score.mean()
-            else:
-                pos_ratio = score.mean(1)
+            pos_ratio = score.mean() if self.dynamic else score.mean(1)
             pred_loss = pred_loss + ((pos_ratio - ratio[i]) ** 2).mean()
 
         cls_loss = self.base_criterion(pred, labels)
@@ -215,7 +211,7 @@ class DistillDiffPruningLoss(torch.nn.Module):
                         reduction='batchmean',
                         log_target=True
                     )
-        
+
         # print(cls_loss, pred_loss)
         loss = self.clf_weight * cls_loss + self.ratio_weight * pred_loss / len(self.pruning_loc) + self.distill_weight * cls_kl_loss + self.distill_weight * token_kl_loss
 
