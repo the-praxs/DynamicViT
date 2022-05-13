@@ -202,10 +202,7 @@ def adjust_learning_rate(param_groups, init_lr, min_lr, step, max_step, warming_
     cos_lr = min_lr + cos_lr * (init_lr - min_lr)
     if warmup_predictor and step < 1:
         cos_lr = init_lr * 0.01
-    if step < warming_up_step:
-        backbone_lr = 0
-    else:
-        backbone_lr = min(init_lr * 0.01, cos_lr)
+    backbone_lr = 0 if step < warming_up_step else min(init_lr * 0.01, cos_lr)
     print('## Using lr  %.7f for BACKBONE, cosine lr = %.7f for PREDICTOR' % (backbone_lr, cos_lr))
     for param_group in param_groups:
         if param_group['name'] == 'predictor':

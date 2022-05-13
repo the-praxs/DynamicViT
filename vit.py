@@ -451,23 +451,18 @@ class VisionTransformerDiffPruning(nn.Module):
                     x = blk(x)
                 p_count += 1
             else:
-                if self.training:
-                    x = blk(x, policy)
-                else:
-                    x = blk(x)
-
+                x = blk(x, policy) if self.training else blk(x)
         x = self.norm(x)
         features = x[:, 1:]
         x = x[:, 0]
         x = self.pre_logits(x)
         x = self.head(x)
-        if self.training:
-            if self.distill:
-                return x, features, prev_decision.detach(), out_pred_prob
-            else:
-                return x, out_pred_prob
-        else:
+        if not self.training:
             return x
+        if self.distill:
+            return x, features, prev_decision.detach(), out_pred_prob
+        else:
+            return x, out_pred_prob
 
 class VisionTransformerTeacher(nn.Module):
     """ Vision Transformer
@@ -570,7 +565,7 @@ class VisionTransformerTeacher(nn.Module):
         x = x + self.pos_embed
         x = self.pos_drop(x)
 
-        for i, blk in enumerate(self.blocks):
+        for blk in self.blocks:
             x = blk(x)
 
         feature = self.norm(x)
@@ -585,17 +580,14 @@ def resize_pos_embed(posemb, posemb_new):
     # https://github.com/google-research/vision_transformer/blob/00883dd691c63a6830751563748663526e811cee/vit_jax/checkpoint.py#L224
     _logger.info('Resized position embedding: %s to %s', posemb.shape, posemb_new.shape)
     ntok_new = posemb_new.shape[1]
-    if True:
-        posemb_tok, posemb_grid = posemb[:, :1], posemb[0, 1:]
-        ntok_new -= 1
-    else:
-        posemb_tok, posemb_grid = posemb[:, :0], posemb[0]
+    posemb_tok, posemb_grid = posemb[:, :1], posemb[0, 1:]
+    ntok_new -= 1
     gs_old = int(math.sqrt(len(posemb_grid)))
     gs_new = int(math.sqrt(ntok_new))
     _logger.info('Position embedding grid-size from %s to %s', gs_old, gs_new)
     posemb_grid = posemb_grid.reshape(1, gs_old, gs_old, -1).permute(0, 3, 1, 2)
     posemb_grid = F.interpolate(posemb_grid, size=(gs_new, gs_new), mode='bilinear')
-    posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_new * gs_new, -1)
+    posemb_grid = posemb_grid.permute(0, 2, 3, 1).reshape(1, gs_new**2, -1)
     posemb = torch.cat([posemb_tok, posemb_grid], dim=1)
     return posemb
 

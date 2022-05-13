@@ -58,8 +58,12 @@ class GroupLinear(nn.Module):
     def forward(self, x):
         t,b,d=x.size()
         x = x.view(t,b,self.groups,int(d/self.groups))
-        out = torch.einsum('tbgd,gdf->tbgf', (x, self.group_weight)).reshape(t,b,self.out_dim)+self.group_bias
-        return out
+        return (
+            torch.einsum('tbgd,gdf->tbgf', (x, self.group_weight)).reshape(
+                t, b, self.out_dim
+            )
+            + self.group_bias
+        )
     def extra_repr(self):
         s = ('{in_dim}, {out_dim}')
         if self.groups != 1:
@@ -117,11 +121,9 @@ class Attention(nn.Module):
     def __init__(self, dim, num_heads=8, head_dim=None, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.):
         super().__init__()
         self.num_heads = num_heads
-        if head_dim is not None:
-            self.head_dim=head_dim
-        else:
+        if head_dim is None:
             head_dim = dim // num_heads
-            self.head_dim = head_dim
+        self.head_dim=head_dim
         self.scale = qk_scale or head_dim ** -0.5
 
         self.qkv = nn.Linear(dim, self.head_dim* self.num_heads * 3, bias=qkv_bias)
@@ -150,7 +152,7 @@ class Attention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
         # B,heads,N,C/heads 
         q, k, v = qkv[0], qkv[1], qkv[2]
-        
+
         # trick here to make q@k.t more stable
         attn = ((q * self.scale) @ k.transpose(-2, -1))
         if padding_mask is not None:
@@ -162,11 +164,10 @@ class Attention(nn.Module):
             # attn_float = attn.softmax(dim=-1, dtype=torch.float32)
             # attn = attn_float.type_as(attn)
             raise NotImplementedError
+        if policy is None:
+            attn = attn.softmax(dim=-1)
         else:
-            if policy is None:
-                attn = attn.softmax(dim=-1)
-            else:
-                attn = self.softmax_with_policy(attn, policy)
+            attn = self.softmax_with_policy(attn, policy)
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, self.head_dim* self.num_heads)
@@ -499,15 +500,14 @@ def rand_bbox(size, lam):
 def get_dpr(drop_path_rate,depth,drop_path_decay='linear'):
     if drop_path_decay=='linear':
         # linear dpr decay
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        return [x.item() for x in torch.linspace(0, drop_path_rate, depth)]
     elif drop_path_decay=='fix':
         # use fixed dpr
-        dpr= [drop_path_rate]*depth
+        return [drop_path_rate]*depth
     else:
         # use predefined drop_path_rate list
         assert len(drop_path_rate)==depth
-        dpr=drop_path_rate
-    return dpr
+        return drop_path_rate
 
 class PredictorLG(nn.Module):
     """ Image to Patch Embedding
@@ -681,26 +681,20 @@ class LVViTDiffPruning(nn.Module):
                     x = blk(x)
                 p_count += 1
             else:
-                if self.training:
-                    x = blk(x, policy)
-                else:
-                    x = blk(x)
-        
+                x = blk(x, policy) if self.training else blk(x)
         x = self.norm(x)
         x_cls = self.head(x[:,0])
         x_aux = self.aux_head(x[:,1:])
         final_pred =  x_cls + 0.5 * x_aux.max(1)[0]
 
         if self.training:
-            if self.distill:
-                return x_cls, x_aux, prev_decision.detach(), out_pred_prob
-            else:
-                return final_pred, out_pred_prob
-        else:
-            if self.viz_mode:
-                return final_pred, decisions
-            else:
-                return final_pred
+            return (
+                (x_cls, x_aux, prev_decision.detach(), out_pred_prob)
+                if self.distill
+                else (final_pred, out_pred_prob)
+            )
+
+        return (final_pred, decisions) if self.viz_mode else final_pred
 
 class LVViT_Teacher(nn.Module):
     """ Vision Transformer with tricks
@@ -803,9 +797,9 @@ class LVViT_Teacher(nn.Module):
         x = x + self.pos_embed
         x = self.pos_drop(x)
 
-        for i, blk in enumerate(self.blocks):
+        for blk in self.blocks:
             x = blk(x)
-        
+
         x = self.norm(x)
         x_cls = self.head(x[:,0])
         x_aux = self.aux_head(x[:,1:])

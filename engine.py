@@ -25,7 +25,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
+    header = f'Epoch: [{epoch}]'
     print_freq = 10
 
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
@@ -42,7 +42,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         loss_value = loss.item()
 
         if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
+            print(f"Loss is {loss_value}, stopping training")
             sys.exit(1)
 
         optimizer.zero_grad()
@@ -51,7 +51,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
         loss_scaler(loss, optimizer, clip_grad=max_norm,
                         parameters=model.parameters(), create_graph=is_second_order)
-    
+
         torch.cuda.synchronize()
         if model_ema is not None:
             model_ema.update(model)
